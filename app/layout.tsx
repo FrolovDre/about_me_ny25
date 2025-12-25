@@ -1,7 +1,5 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import Snowfall from '../components/Snowfall';
-import CursorFireTrail from '../components/CursorFireTrail';
 
 export const metadata: Metadata = {
   title: 'Новогоднее портфолио',
@@ -16,8 +14,6 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body>
-        <Snowfall />
-        <CursorFireTrail />
         {children}
       </body>
     </html>
