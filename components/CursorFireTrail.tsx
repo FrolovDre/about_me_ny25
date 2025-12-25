@@ -6,19 +6,21 @@ type Point = {
   x: number;
   y: number;
   life: number;
+  intensity: number;
 };
 
-const MAX_POINTS = 60;
-const MELT_DISTANCE = 180;
-const MELT_TIME = 1200;
-const WET_TIME = 3200;
+const MAX_POINTS = 40;
+const MELT_TIME = 800;
+const WET_TIME = 2400;
+const MELT_DISTANCE = 150;
 
 export default function CursorFireTrail() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointsRef = useRef<Point[]>([]);
   const animationRef = useRef<number>(0);
-  const timeoutsRef = useRef(new WeakMap<HTMLElement, number[]>());
   const isActiveRef = useRef(false);
+  const intensityRef = useRef(1);
+  const timeoutsRef = useRef(new WeakMap<HTMLElement, number[]>());
 
   useEffect(() => {
     const isFinePointer = window.matchMedia('(pointer: fine)').matches;
@@ -72,40 +74,57 @@ export default function CursorFireTrail() {
       timeoutsRef.current.set(element, [meltingTimer, wetTimer]);
     };
 
+    const snowTargets = Array.from(document.querySelectorAll<HTMLElement>('[data-snow="true"]'));
+    const hoverHandlers = new Map<HTMLElement, () => void>();
+    snowTargets.forEach((target) => {
+      if (!target.dataset.snowState) {
+        setState(target, 'snowy');
+      }
+      const handler = () => triggerMelt(target);
+      hoverHandlers.set(target, handler);
+      target.addEventListener('mouseenter', handler);
+    });
+
     resize();
     window.addEventListener('resize', resize);
 
     const handleMove = (event: MouseEvent) => {
       isActiveRef.current = true;
-      pointsRef.current.push({ x: event.clientX, y: event.clientY, life: 1 });
+      pointsRef.current.push({
+        x: event.clientX,
+        y: event.clientY,
+        life: 1,
+        intensity: intensityRef.current
+      });
       if (pointsRef.current.length > MAX_POINTS) {
         pointsRef.current.shift();
       }
 
-      document.querySelectorAll<HTMLElement>('[data-snow="true"]').forEach((el) => {
-        if (!el.dataset.snowState) {
-          setState(el, 'snowy');
-        }
+      let closest = Number.POSITIVE_INFINITY;
+      snowTargets.forEach((el) => {
         const rect = el.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
         const distance = Math.hypot(centerX - event.clientX, centerY - event.clientY);
-        const isSnowy = el.dataset.snowState === 'snowy';
-        if (distance < MELT_DISTANCE && isSnowy) {
+        closest = Math.min(closest, distance);
+        if (distance < MELT_DISTANCE) {
           triggerMelt(el);
         }
       });
+      intensityRef.current = closest < MELT_DISTANCE ? 1.35 : 1;
     };
 
     const draw = () => {
       context.clearRect(0, 0, width, height);
       if (isActiveRef.current) {
         context.globalCompositeOperation = 'lighter';
+        context.filter = 'blur(0.6px)';
         pointsRef.current.forEach((point, index) => {
           const life = Math.max(point.life, 0);
-          const size = 28 + index * 1.15;
-          const inner = size * 0.3;
-          const outer = size * 3;
+          const boost = point.intensity;
+          const size = (18 + index * 0.9) * boost;
+          const inner = size * 0.28;
+          const outer = size * 2.4;
           const rise = 14 * life;
           const drift = ((index % 5) - 2) * 2;
           const flameX = point.x + drift;
@@ -118,44 +137,45 @@ export default function CursorFireTrail() {
             flameY,
             outer
           );
-          flameGradient.addColorStop(0, `rgba(255, 245, 230, ${0.95 * life})`);
-          flameGradient.addColorStop(0.25, `rgba(255, 205, 150, ${0.85 * life})`);
-          flameGradient.addColorStop(0.55, `rgba(255, 145, 90, ${0.6 * life})`);
-          flameGradient.addColorStop(0.8, `rgba(255, 100, 55, ${0.35 * life})`);
-          flameGradient.addColorStop(1, 'rgba(255, 70, 30, 0)');
+          flameGradient.addColorStop(0, `rgba(255, 244, 214, ${0.9 * life})`);
+          flameGradient.addColorStop(0.35, `rgba(255, 189, 120, ${0.75 * life})`);
+          flameGradient.addColorStop(0.65, `rgba(255, 125, 110, ${0.45 * life})`);
+          flameGradient.addColorStop(0.85, `rgba(244, 114, 182, ${0.2 * life})`);
+          flameGradient.addColorStop(1, 'rgba(244, 114, 182, 0)');
           context.save();
           context.translate(flameX, flameY);
-          context.scale(1.1, 1.6);
+          context.scale(0.95, 1.3);
           context.fillStyle = flameGradient;
           context.beginPath();
           context.arc(0, 0, outer, 0, Math.PI * 2);
           context.fill();
           context.restore();
 
-          const coreY = point.y - rise * 0.65;
+          const coreY = point.y - rise * 0.55;
           const coreGradient = context.createRadialGradient(
             point.x,
             coreY,
             0,
             point.x,
             coreY,
-            size
+            size * 0.9
           );
-          coreGradient.addColorStop(0, `rgba(255, 255, 255, ${0.55 * life})`);
-          coreGradient.addColorStop(0.65, `rgba(255, 200, 130, ${0.35 * life})`);
-          coreGradient.addColorStop(1, 'rgba(255, 130, 90, 0)');
+          coreGradient.addColorStop(0, `rgba(255, 255, 255, ${0.45 * life})`);
+          coreGradient.addColorStop(0.7, `rgba(255, 212, 150, ${0.25 * life})`);
+          coreGradient.addColorStop(1, 'rgba(255, 190, 170, 0)');
           context.save();
           context.translate(point.x, coreY);
-          context.scale(1, 1.2);
+          context.scale(0.9, 1.1);
           context.fillStyle = coreGradient;
           context.beginPath();
           context.arc(0, 0, size, 0, Math.PI * 2);
           context.fill();
           context.restore();
 
-          point.life -= 0.035;
+          point.life -= 0.04;
         });
         context.globalCompositeOperation = 'source-over';
+        context.filter = 'none';
 
         pointsRef.current = pointsRef.current.filter((point) => point.life > 0);
       }
@@ -169,6 +189,12 @@ export default function CursorFireTrail() {
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('resize', resize);
       window.cancelAnimationFrame(animationRef.current);
+      snowTargets.forEach((target) => {
+        const handler = hoverHandlers.get(target);
+        if (handler) {
+          target.removeEventListener('mouseenter', handler);
+        }
+      });
     };
   }, []);
 
